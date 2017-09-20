@@ -1,0 +1,124 @@
+#!/bin/bash
+
+set -e
+trap 'kill $(jobs -p) 2>/dev/null' EXIT
+
+function find_unused_port() {
+  for port in $(seq $1 65000); do
+    echo -ne "\035" | telnet 127.0.0.1 $port >/dev/null 2>&1;
+    if [ $? -eq 1 ]; then
+      echo $port
+      exit
+    fi
+  done
+  echo "ERROR: Can't find unused port in range $1-65000"
+  exit 1
+}
+
+function install_deps() {
+  for cmd in python2.7 perl pip; do
+    if ! which $cmd >/dev/null 2>&1; then
+      echo "ERROR: $cmd is not installed!"
+      exit 1
+    fi
+  done
+
+  echo -e "[$(date +%FT%T)] Installing dependencies"
+  [ ! -d $install_dir ] && mkdir $install_dir
+  pushd $install_dir >/dev/null
+  pip -q install --user influxdb blist
+
+  wget -qc https://github.com/etsy/statsd-jvm-profiler/releases/download/2.1.0/statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar
+  ln -sf statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar statsd-jvm-profiler.jar
+
+  wget -qc https://raw.githubusercontent.com/aviemzur/statsd-jvm-profiler/master/visualization/influxdb_dump.py
+  wget -qc https://raw.githubusercontent.com/brendangregg/FlameGraph/master/flamegraph.pl
+
+  wget -qc https://dl.influxdata.com/influxdb/releases/influxdb-1.2.4_linux_amd64.tar.gz
+  tar -xzf influxdb-1.2.4_linux_amd64.tar.gz
+  ln -sf influxdb-1.2.4-1 influxdb
+  popd >/dev/null
+}
+
+function run_influxdb() {
+  echo -e "[$(date +%FT%T)] Starting InfluxDB"
+  cat << EOF >influxdb.conf
+reporting-disabled = true
+hostname = "${local_ip}"
+bind-address = ":${influx_meta_port}"
+[meta]
+  dir = "$(pwd)/influxdb/meta"
+[data]
+  dir = "$(pwd)/influxdb/data"
+  wal-dir = "$(pwd)/influxdb/wal"
+[admin]
+  enabled = false
+[http]
+  bind-address = ":${influx_http_port}"
+EOF
+  rm -rf influxdb
+  $install_dir/influxdb/usr/bin/influxd -config influxdb.conf >influxdb.log 2>&1 &
+
+  wait_secs=5
+  while [ $wait_secs -gt 0 ]; do
+    if curl -sS -i $influx_uri/ping 2>/dev/null | grep X-Influxdb-Version >/dev/null; then
+      break
+    fi
+    sleep 1
+    wait_secs=$(($wait_secs-1))
+  done
+
+  if [ $wait_secs -eq 0 ]; then
+    echo "ERROR: Couldn't start InfluxDB!"
+    exit 1
+  fi
+
+  curl -sS -X POST $influx_uri/query --data-urlencode "q=CREATE DATABASE profiler" >/dev/null
+  curl -sS -X POST $influx_uri/query --data-urlencode "q=CREATE USER profiler WITH PASSWORD 'profiler' WITH ALL PRIVILEGES" >/dev/null
+}
+
+function run_spark_submit() {
+  spark_args=()
+  jars=$install_dir/statsd-jvm-profiler.jar
+  while [[ $# > 0 ]]; do
+    case "$1" in
+      --jars) jars="$jars,$2"
+        shift
+        ;;
+      *) spark_args+=("$1")
+        [[ "$1" == *.jar ]] && flamegraph_title="$1"
+        ;;
+    esac
+    shift
+  done
+
+  spark_cmd=(spark-submit)
+  spark_cmd+=(--jars)
+  spark_cmd+=("$jars")
+  spark_cmd+=(--conf)
+  spark_cmd+=("spark.executor.extraJavaOptions=-javaagent:statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
+  spark_cmd+=(${spark_args[@]})
+
+  echo -e "[$(date +%FT%T)] Executing: ${spark_cmd[@]}"
+  "${spark_cmd[@]}"
+}
+
+function generate_flamegraph() {
+  rm -rf stack_traces
+  python2.7 $install_dir/influxdb_dump.py -o $local_ip -r $influx_http_port -u profiler -p profiler -d profiler -t spark -e sparkapp -x stack_traces
+  perl $install_dir/flamegraph.pl --title "$flamegraph_title" stack_traces/all_*.txt > flamegraph.svg
+  rm -rf stack_traces
+  echo -e "[$(date +%FT%T)] Created flamegraph: $(pwd)/flamegraph.svg"
+}
+
+local_ip=$(ip route get 8.8.8.8 | awk '{print $NF; exit}')
+install_dir=$HOME/.spark-flamegraph
+influx_meta_port=$(find_unused_port 48080)
+influx_http_port=$(find_unused_port $(($influx_meta_port+1)))
+influx_uri=http://${local_ip}:${influx_http_port}
+flamegraph_title="Spark Application"
+
+install_deps
+run_influxdb
+run_spark_submit "$@"
+generate_flamegraph
