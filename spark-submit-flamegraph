@@ -36,7 +36,8 @@ function install_deps() {
 
   wget -qc https://dl.influxdata.com/influxdb/releases/influxdb-1.2.4_linux_amd64.tar.gz
   tar -xzf influxdb-1.2.4_linux_amd64.tar.gz
-  ln -sf influxdb-1.2.4-1 influxdb
+  rm -f influxdb
+  ln -s influxdb-1.2.4-1 influxdb
   popd >/dev/null
 }
 
@@ -100,7 +101,7 @@ function run_spark_submit() {
   spark_cmd+=(${spark_args[@]})
 
   echo -e "[$(date +%FT%T)] Executing: ${spark_cmd[@]}"
-  "${spark_cmd[@]}"
+  "${spark_cmd[@]}" || echo "Spark has exited with bad exit code"
 }
 
 function generate_flamegraph() {
