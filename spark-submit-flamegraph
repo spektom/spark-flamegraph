@@ -80,13 +80,29 @@ EOF
 
 function run_spark_submit() {
   spark_args=()
+
   jars=$install_dir/statsd-jvm-profiler.jar
+
+  executor_java_opts="-javaagent:statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark"
+
+  driver_java_opts="-javaagent:${install_dir}/statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark"
+
   while [[ $# > 0 ]]; do
     case "$1" in
-      --jars) jars="$jars,$2"
+      --jars)
+        jars="$jars,$2"
         shift
         ;;
-      *) spark_args+=("$1")
+      spark.executor.extraJavaOptions=*)
+        spark_args+=("$1 ${executor_java_opts}")
+        executor_java_opts_patched=true
+        ;;
+      spark.driver.extraJavaOptions=*)
+        spark_args+=("$1 ${driver_java_opts}")
+        driver_java_opts_patched=true
+        ;;
+      *)
+        spark_args+=("$1")
         [[ "$1" == *.jar ]] && flamegraph_title="$1"
         ;;
     esac
@@ -96,11 +112,18 @@ function run_spark_submit() {
   spark_cmd=(spark-submit)
   spark_cmd+=(--jars)
   spark_cmd+=("$jars")
-  spark_cmd+=(--conf)
-  spark_cmd+=("spark.executor.extraJavaOptions=-javaagent:statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
-  spark_cmd+=(--conf)
-  spark_cmd+=("spark.driver.extraJavaOptions=-javaagent:${install_dir}/statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
-  spark_cmd+=(${spark_args[@]})
+
+  if [ -z ${executor_java_opts_patched+x} ]; then
+    spark_cmd+=(--conf)
+    spark_cmd+=("spark.executor.extraJavaOptions=-javaagent:statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
+  fi
+
+  if [ -z ${driver_java_opts_patched+x} ]; then
+    spark_cmd+=(--conf)
+    spark_cmd+=("spark.driver.extraJavaOptions=-javaagent:${install_dir}/statsd-jvm-profiler.jar=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
+  fi
+
+  spark_cmd+=("${spark_args[@]}")
 
   echo -e "[$(date +%FT%T)] Executing: ${spark_cmd[@]}"
   "${spark_cmd[@]}" || echo "Spark has exited with bad exit code"
