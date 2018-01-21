@@ -10,7 +10,7 @@ spark-submit wrapper that generates Flame Graph.
 
 ## Prerequisites
 
-The following commands must be present:
+The script shoild work out of the box on AWS EMR, otherwise the following utilities must present on your system:
 
  * perl
  * python2.7
