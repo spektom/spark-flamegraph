@@ -2,7 +2,7 @@
 
 spark-submit wrapper that generates Flame Graph.
 
-![Flame Graph Example](flamegraph.png)
+<img src="flamegraph.png" height="250px" />
 
 ## Supported Systems
 
