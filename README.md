@@ -7,6 +7,7 @@ spark-submit wrapper that generates Flame Graph.
 ## Supported Systems
 
  * Linux
+ * macOS (with [Homebrew](https://brew.sh/) installed)
 
 ## Prerequisites
 
@@ -25,7 +26,14 @@ wget -O /usr/local/bin/spark-submit-flamegraph \
 chmod +x /usr/local/bin/spark-submit-flamegraph
 ```
 
-Use the `spark-submit-flamegraph` as a replacement for the `spark-submit` command.
+Use `spark-submit-flamegraph` as a replacement for the `spark-submit` command.
+
+To tweak Spark command used for running an application set `SPARK_CMD` environment variable,
+for instance to run `spark-shell` use:
+
+```bash
+SPARK_CMD=spark-shell /usr/local/bin/spark-submit-flamegraph
+```
 
 ## Details
 
