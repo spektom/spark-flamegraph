@@ -58,9 +58,10 @@ function install_deps() {
     tar -xzf influxdb-1.2.4_linux_amd64.tar.gz
     rm -f influxdb
     ln -s influxdb-1.2.4-1 influxdb
-    popd >/dev/null
     export PATH=$install_dir/influxdb/usr/bin:$PATH
   fi
+
+  popd >/dev/null
 }
 
 function run_influxdb() {
