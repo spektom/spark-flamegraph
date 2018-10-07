@@ -1,13 +1,16 @@
 # spark-flamegraph
 
-spark-submit wrapper that generates [Flame Graph](http://www.brendangregg.com/flamegraphs.html).
+Easy CPU Profiling for [Apache Spark](https://spark.apache.org/) applications.
+
+The script `spark-submit-flamegraph` is a wrapper around standard `spark-submit` that generates [Flame Graph](http://www.brendangregg.com/flamegraphs.html).
 
 <img src="flamegraph.png" height="250px" />
 
 ## Supported Systems
 
- * Linux
- * macOS (with [Homebrew](https://brew.sh/) installed)
+ * Amazon EMR
+ * Most Linux distributions
+ * Mac (with [Homebrew](https://brew.sh/) installed)
 
 ## Prerequisites
 
