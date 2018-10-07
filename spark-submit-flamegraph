@@ -63,7 +63,7 @@ function install_deps() {
 
   if [ ! -f statsd-jvm-profiler-2.1.0-shaded.jar ]; then
     echo -e "[$(date -Ins)] Shading possibly conflicing Java packages in statsd-jvm-profiler.jar"
-    cat<<EOF>jarjar-rules.txt
+    cat << EOF >jarjar-rules.txt
 rule com.timgroup.**     com.timgroup.sparkflamegraph.@1
 rule com.google.guava.** com.google.guava.sparkflamegraph.@1
 rule org.influxdb.**     org.influxdb.sparkflamegraph.@1
@@ -108,10 +108,10 @@ EOF
     exit 1
   fi
 
-  curl -sS -X POST $influx_uri/query \
+  curl -fsS -X POST $influx_uri/query \
     --data-urlencode "q=CREATE DATABASE profiler" >/dev/null
 
-  curl -sS -X POST $influx_uri/query \
+  curl -fsS -X POST $influx_uri/query \
     --data-urlencode "q=CREATE USER profiler WITH PASSWORD 'profiler' WITH ALL PRIVILEGES" >/dev/null
 }
 
@@ -182,14 +182,14 @@ username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
 
 function generate_flamegraph() {
   rm -rf stack_traces
-  echo -e "[$(date -Ins)] Collecting metrics"
+  echo -e "[$(date -Ins)] Collecting profiling metrics"
 
   python2.7 $install_dir/influxdb_dump.py \
     -o $local_ip -r $influx_http_port -u profiler \
     -p profiler -d profiler -t spark -e sparkapp -x stack_traces >/dev/null 2>&1 && :
 
   if [ $? -ne 0 ]; then
-    echo -e "[$(date -Ins)] No metrics were recorded!"
+    echo -e "[$(date -Ins)] No profiling metrics were recorded!"
     return 0
   fi
 
