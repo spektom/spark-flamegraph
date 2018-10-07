@@ -40,13 +40,10 @@ function install_deps() {
     fi
   done
 
-  echo -e "[$(date +%FT%T)] Installing dependencies"
+  echo -e "[$(date -Ins)] Installing dependencies"
   [ ! -d $install_dir ] && mkdir $install_dir
   pushd $install_dir >/dev/null
   pip -q install --user influxdb blist pytz
-
-  wget -qc https://github.com/etsy/statsd-jvm-profiler/releases/download/2.1.0/statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar
-  ln -sf statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar statsd-jvm-profiler.jar
 
   wget -qc https://raw.githubusercontent.com/aviemzur/statsd-jvm-profiler/master/visualization/influxdb_dump.py
   wget -qc https://raw.githubusercontent.com/brendangregg/FlameGraph/master/flamegraph.pl
@@ -61,11 +58,25 @@ function install_deps() {
     export PATH=$install_dir/influxdb/usr/bin:$PATH
   fi
 
+  wget -qc https://github.com/etsy/statsd-jvm-profiler/releases/download/2.1.0/statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar
+  wget -qc https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jarjar/jarjar-1.4.jar
+
+  if [ ! -f statsd-jvm-profiler-2.1.0-shaded.jar ]; then
+    echo -e "[$(date -Ins)] Shading possibly conflicing Java packages in statsd-jvm-profiler.jar"
+    cat<<EOF>jarjar-rules.txt
+rule com.timgroup.**     com.timgroup.sparkflamegraph.@1
+rule com.google.guava.** com.google.guava.sparkflamegraph.@1
+rule org.influxdb.**     org.influxdb.sparkflamegraph.@1
+EOF
+    java -jar jarjar-1.4.jar process jarjar-rules.txt statsd-jvm-profiler-2.1.0-jar-with-dependencies.jar statsd-jvm-profiler-2.1.0-shaded.jar
+  fi
+  ln -sf statsd-jvm-profiler-2.1.0-shaded.jar statsd-jvm-profiler.jar
+
   popd >/dev/null
 }
 
 function run_influxdb() {
-  echo -e "[$(date +%FT%T)] Starting InfluxDB"
+  echo -e "[$(date -Ins)] Starting InfluxDB"
   cat << EOF >influxdb.conf
 reporting-disabled = true
 hostname = "${local_ip}"
@@ -161,24 +172,24 @@ username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
     spark_cmd+=("${spark_args[@]}")
   fi
 
-  echo -e "[$(date +%FT%T)] Executing: ${spark_cmd[@]}"
+  echo -e "[$(date -Ins)] Executing: ${spark_cmd[@]}"
   "${spark_cmd[@]}" && :
   spark_exit_code=$?
   if [ $spark_exit_code -ne 0 ]; then
-    echo -e "[$(date +%FT%T)] Spark has exited with bad exit code ($spark_exit_code)"
+    echo -e "[$(date -Ins)] Spark has exited with bad exit code ($spark_exit_code)"
   fi
 }
 
 function generate_flamegraph() {
   rm -rf stack_traces
-  echo -e "[$(date +%FT%T)] Collecting metrics"
+  echo -e "[$(date -Ins)] Collecting metrics"
 
   python2.7 $install_dir/influxdb_dump.py \
     -o $local_ip -r $influx_http_port -u profiler \
     -p profiler -d profiler -t spark -e sparkapp -x stack_traces >/dev/null 2>&1 && :
 
   if [ $? -ne 0 ]; then
-    echo -e "[$(date +%FT%T)] No metrics were recorded!"
+    echo -e "[$(date -Ins)] No metrics were recorded!"
     return 0
   fi
 
@@ -187,13 +198,13 @@ function generate_flamegraph() {
     stack_traces/all_*.txt > flamegraph.svg
 
   rm -rf stack_traces
-  echo -e "[$(date +%FT%T)] Created flamegraph: $(pwd)/flamegraph.svg"
+  echo -e "[$(date -Ins)] Created flamegraph: $(pwd)/flamegraph.svg"
 }
 
 if [ "$(uname)" == "Darwin" ]; then
   local_ip=$(ifconfig | awk '/inet / && $2 != "127.0.0.1"{print $2; exit}')
 else
-  local_ip=$(ip route get 8.8.8.8 | awk '{print $NF; exit}')
+  local_ip=$(ip route get 1.1.1.1 | awk '{print $NF; exit}')
 fi
 install_dir=$HOME/.spark-flamegraph
 influx_meta_port=$(find_unused_port 48080)
