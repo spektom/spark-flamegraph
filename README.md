@@ -1,6 +1,6 @@
 # spark-flamegraph
 
-spark-submit wrapper that generates Flame Graph.
+spark-submit wrapper that generates [Flame Graph](http://www.brendangregg.com/flamegraphs.html).
 
 <img src="flamegraph.png" height="250px" />
 
@@ -11,7 +11,8 @@ spark-submit wrapper that generates Flame Graph.
 
 ## Prerequisites
 
-The script shoild work out of the box on AWS EMR, otherwise the following utilities must present on your system:
+The script is adapted for work in [Amazon EMR](https://aws.amazon.com/emr/).
+Otherwise the following utilities must present on your system:
 
  * perl
  * python2.7
@@ -40,7 +41,7 @@ SPARK_CMD=spark-shell /usr/local/bin/spark-submit-flamegraph
 The script does the following operations to make profiling Spark applications as easy as possible:
 
   * Downloads InfluxDB, and starts it on some random port.
-  * Starts Spark application using original `spark-submit` command, with the statsd profiler Jar in its classpath and with the configuration that tells it to report statistics back to the InfluxDB instance.
+  * Starts Spark application using original `spark-submit` command, with the StatsD profiler Jar in its classpath and with the configuration that tells it to report statistics back to the InfluxDB instance.
   * After running Spark application, queries all the reported metrics from the InfluxDB instance.
   * Run a script that generates the .SVG file.
   * Stops the InfluxDB instance.
