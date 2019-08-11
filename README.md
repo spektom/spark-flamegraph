@@ -1,4 +1,7 @@
-# spark-flamegraph
+spark-flamegraph
+================
+
+[![Build Status](https://travis-ci.org/spektom/spark-flamegraph.svg?branch=master)](https://travis-ci.org/spektom/spark-flamegraph)
 
 Easy CPU Profiling for [Apache Spark](https://spark.apache.org/) applications.
 
@@ -18,8 +21,8 @@ The script is adapted for work in [Amazon EMR](https://aws.amazon.com/emr/).
 Otherwise the following utilities must present on your system:
 
  * perl
- * python2.7
- * pip
+ * python2.7 (or set `PYTHON` environment variable to the Python executabl)
+ * pip (or set `PIP` environment variable to the pip utility)
 
 ## Running
 
@@ -32,8 +35,17 @@ chmod +x /usr/local/bin/spark-submit-flamegraph
 
 Use `spark-submit-flamegraph` as a replacement for the `spark-submit` command.
 
-To tweak Spark command used for running an application set `SPARK_CMD` environment variable,
-for instance to run `spark-shell` use:
+## Configuration
+
+To configure use the following environment variables:
+
+| Environment Variable | Description  | Default value |
+| -------------------- | ------------ | ------------- |
+| `SPARK_CMD` | Spark command to run | spark-submit |
+| `PYTHON` | Path to the Python executable | python2.7 |
+| `PIP` | Path to the pip utility | pip |
+
+For example, to profile Spark shell session set `SPARK_CMD` environment variable:
 
 ```bash
 SPARK_CMD=spark-shell /usr/local/bin/spark-submit-flamegraph

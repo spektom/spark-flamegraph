@@ -14,9 +14,15 @@
 #
 # Author: Michael Spector <spektom@gmail.com>
 
+PYTHON=${PYTHON:-python2.7}
+PIP=${PIP:-pip}
+SPARK_CMD=${SPARK_CMD:-spark-submit}
+LOCAL_IP=${LOCAL_IP:-}
+TEST=${TEST:-}
+
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
-function find_unused_port() {
+find_unused_port() {
   for port in $(seq $1 65000); do
     if [ "$(uname)" == "Darwin" ]; then
       nc -nz 127.0.0.1 $port >/dev/null 2>&1;
@@ -28,14 +34,32 @@ function find_unused_port() {
       exit
     fi
   done
-  echo "ERROR: Can't find unused port in range $1-65000"
+  echo "ERROR: Can't find unused port in range $1-65000" >&2
   exit 1
 }
 
-function install_deps() {
-  for cmd in python2.7 perl pip; do
+detect_local_ip() {
+  if [ ! -z "${LOCAL_IP}" ]; then
+    echo $LOCAL_IP
+    exit
+  fi
+  if [ "$(uname)" == "Darwin" ]; then
+    ip=$(ifconfig | awk '/inet / && $2 != "127.0.0.1"{print $2; exit}')
+  else
+    ip=$(ip route get 1.1.1.1 | head -1 | sed -e 's/.* src //' -e 's/ .*//')
+  fi
+  if echo $ip | grep '^[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*$' >/dev/null; then
+    echo $ip
+    exit
+  fi
+  echo "ERROR: Can't detect local IP address by which this node can be reached from outside" >&2
+  exit 1
+}
+
+install_deps() {
+  for cmd in $PYTHON perl $PIP; do
     if ! which $cmd >/dev/null 2>&1; then
-      echo "ERROR: $cmd is not installed!"
+      echo "ERROR: $cmd is not installed!" >&2
       exit 1
     fi
   done
@@ -43,7 +67,7 @@ function install_deps() {
   echo -e "[$(date -Ins)] Installing dependencies"
   [ ! -d $install_dir ] && mkdir $install_dir
   pushd $install_dir >/dev/null
-  pip -q install --user influxdb blist pytz
+  $PIP -q install --user influxdb blist pytz
 
   wget -qc https://raw.githubusercontent.com/aviemzur/statsd-jvm-profiler/master/visualization/influxdb_dump.py
   wget -qc https://raw.githubusercontent.com/brendangregg/FlameGraph/master/flamegraph.pl
@@ -75,7 +99,7 @@ EOF
   popd >/dev/null
 }
 
-function run_influxdb() {
+run_influxdb() {
   echo -e "[$(date -Ins)] Starting InfluxDB"
   cat << EOF >influxdb.conf
 reporting-disabled = true
@@ -104,7 +128,7 @@ EOF
   done
 
   if [ $wait_secs -eq 0 ]; then
-    echo "ERROR: Couldn't start InfluxDB!"
+    echo "ERROR: Couldn't start InfluxDB!" >&2
     exit 1
   fi
 
@@ -115,7 +139,7 @@ EOF
     --data-urlencode "q=CREATE USER profiler WITH PASSWORD 'profiler' WITH ALL PRIVILEGES" >/dev/null
 }
 
-function run_spark_submit() {
+run_spark_submit() {
   spark_args=()
 
   jars=$install_dir/statsd-jvm-profiler.jar
@@ -140,7 +164,11 @@ password=profiler,prefix=sparkapp,tagMapping=spark"
         ;;
       spark.driver.extraJavaOptions=*)
         spark_args+=("$1 ${driver_java_opts}")
-        driver_java_opts_patched=true
+        driver_java_opts="$(echo $1 | cut -d= -f2) ${driver_java_opts}"
+        ;;
+      --driver-java-options)
+        driver_java_opts="$2 ${driver_java_opts}"
+        shift
         ;;
       *)
         spark_args+=("$1")
@@ -150,22 +178,17 @@ password=profiler,prefix=sparkapp,tagMapping=spark"
     shift
   done
 
-  spark_cmd=("${spark_cmd}")
+  spark_cmd=("${SPARK_CMD}")
+
   spark_cmd+=(--jars)
   spark_cmd+=("${jars}")
 
+  spark_args+=(--driver-java-options)
+  spark_args+=("${driver_java_opts}")
+
   if [ -z ${executor_java_opts_patched+x} ]; then
     spark_cmd+=(--conf)
-    spark_cmd+=("spark.executor.extraJavaOptions=-javaagent:statsd-jvm-profiler.jar\
-=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,\
-username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
-  fi
-
-  if [ -z ${driver_java_opts_patched+x} ]; then
-    spark_cmd+=(--conf)
-    spark_cmd+=("spark.driver.extraJavaOptions=-javaagent:${install_dir}/statsd-jvm-profiler.jar\
-=server=${local_ip},port=${influx_http_port},reporter=InfluxDBReporter,database=profiler,\
-username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
+    spark_cmd+=("spark.executor.extraJavaOptions=${executor_java_opts}")
   fi
 
   if [ "${#spark_args[@]}" -gt 0 ]; then
@@ -173,18 +196,21 @@ username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark")
   fi
 
   echo -e "[$(date -Ins)] Executing: ${spark_cmd[@]}"
-  "${spark_cmd[@]}" && :
-  spark_exit_code=$?
-  if [ $spark_exit_code -ne 0 ]; then
-    echo -e "[$(date -Ins)] Spark has exited with bad exit code ($spark_exit_code)"
+
+  if [ -z "${TEST}" ]; then
+    "${spark_cmd[@]}" && :
+    spark_exit_code=$?
+    if [ $spark_exit_code -ne 0 ]; then
+      echo -e "[$(date -Ins)] Spark has exited with bad exit code ($spark_exit_code)"
+    fi
   fi
 }
 
-function generate_flamegraph() {
+generate_flamegraph() {
   rm -rf stack_traces
   echo -e "[$(date -Ins)] Collecting profiling metrics"
 
-  python2.7 $install_dir/influxdb_dump.py \
+  $PYTHON $install_dir/influxdb_dump.py \
     -o $local_ip -r $influx_http_port -u profiler \
     -p profiler -d profiler -t spark -e sparkapp -x stack_traces >/dev/null 2>&1 && :
 
@@ -201,21 +227,28 @@ function generate_flamegraph() {
   echo -e "[$(date -Ins)] Created flamegraph: $(pwd)/flamegraph.svg"
 }
 
-if [ "$(uname)" == "Darwin" ]; then
-  local_ip=$(ifconfig | awk '/inet / && $2 != "127.0.0.1"{print $2; exit}')
-else
-  local_ip=$(ip route get 1.1.1.1 | awk '{print $NF; exit}')
+main() {
+  install_dir=$HOME/.spark-flamegraph
+  local_ip=$(detect_local_ip)
+  influx_meta_port=$(find_unused_port 48080)
+  influx_http_port=$(find_unused_port $(($influx_meta_port+1)))
+  influx_uri=http://${local_ip}:${influx_http_port}
+  flamegraph_title="Spark Application"
+
+  if [ -z "${TEST}" ]; then
+    install_deps
+    run_influxdb
+  fi
+
+  run_spark_submit "$@"
+
+  if [ -z "${TEST}" ]; then
+    generate_flamegraph
+  fi
+}
+
+main "$@"
+
+if [ -z "${TEST}" ]; then
+  exit $spark_exit_code
 fi
-install_dir=$HOME/.spark-flamegraph
-influx_meta_port=$(find_unused_port 48080)
-influx_http_port=$(find_unused_port $(($influx_meta_port+1)))
-influx_uri=http://${local_ip}:${influx_http_port}
-flamegraph_title="Spark Application"
-spark_cmd=${SPARK_CMD:-"spark-submit"}
-
-install_deps
-run_influxdb
-run_spark_submit "$@"
-generate_flamegraph
-
-exit $spark_exit_code

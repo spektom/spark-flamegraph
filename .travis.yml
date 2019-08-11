@@ -1,0 +1,3 @@
+script:
+  - bash -n spark-submit-flamegraph
+  - ./run-tests.sh

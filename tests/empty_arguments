@@ -1,0 +1,2 @@
+spark-submit-flamegraph
+spark-submit --jars $HOME/.spark-flamegraph/statsd-jvm-profiler.jar --conf spark.executor.extraJavaOptions=-javaagent:statsd-jvm-profiler.jar=server=.*,port=.*,reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark --driver-java-options -javaagent:$HOME/.spark-flamegraph/statsd-jvm-profiler.jar=server=.*,port=.*,reporter=InfluxDBReporter,database=profiler,username=profiler,password=profiler,prefix=sparkapp,tagMapping=spark
