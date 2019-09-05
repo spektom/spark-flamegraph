@@ -1,7 +1,7 @@
 spark-flamegraph
 ================
 
-[![Build Status](https://travis-ci.org/spektom/spark-flamegraph.svg?branch=master)](https://travis-ci.org/spektom/spark-flamegraph)
+![Build Status](https://github.com/spektom/spark-flamegraph/workflows/CI/badge.svg)
 
 Easy CPU Profiling for [Apache Spark](https://spark.apache.org/) applications.
 
