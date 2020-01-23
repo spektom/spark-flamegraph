@@ -64,7 +64,7 @@ install_deps() {
     fi
   done
 
-  echo -e "[$(date)] Installing dependencies"
+  echo -e "[$(date +"%FT%T.%s")] Installing dependencies"
   [ ! -d $install_dir ] && mkdir $install_dir
   pushd $install_dir >/dev/null
   $PIP -q install --user influxdb blist pytz
@@ -86,7 +86,7 @@ install_deps() {
   wget -qc https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jarjar/jarjar-1.4.jar
 
   if [ ! -f statsd-jvm-profiler-2.1.0-shaded.jar ]; then
-    echo -e "[$(date)] Shading possibly conflicing Java packages in statsd-jvm-profiler.jar"
+    echo -e "[$(date +"%FT%T.%s")] Shading possibly conflicing Java packages in statsd-jvm-profiler.jar"
     cat << EOF >jarjar-rules.txt
 rule com.timgroup.**     com.timgroup.sparkflamegraph.@1
 rule com.google.guava.** com.google.guava.sparkflamegraph.@1
@@ -100,7 +100,7 @@ EOF
 }
 
 run_influxdb() {
-  echo -e "[$(date)] Starting InfluxDB"
+  echo -e "[$(date +"%FT%T.%s")] Starting InfluxDB"
   cat << EOF >influxdb.conf
 reporting-disabled = true
 hostname = "${local_ip}"
@@ -118,7 +118,7 @@ EOF
   rm -rf influxdb
   influxd -config influxdb.conf >influxdb.log 2>&1 &
 
-  echo -e "InfluxDB starting at :${influx_http_port}"
+  echo -e "[$(date +"%FT%T.%s")] InfluxDB starting at :${influx_http_port}"
 
   wait_secs=10
   while [ $wait_secs -gt 0 ]; do
@@ -197,27 +197,27 @@ password=profiler,prefix=sparkapp,tagMapping=spark"
     spark_cmd+=("${spark_args[@]}")
   fi
 
-  echo -e "[$(date)] Executing: ${spark_cmd[@]}"
+  echo -e "[$(date +"%FT%T.%s")] Executing: ${spark_cmd[@]}"
 
   if [ -z "${TEST}" ]; then
     "${spark_cmd[@]}" && :
     spark_exit_code=$?
     if [ $spark_exit_code -ne 0 ]; then
-      echo -e "[$(date)] Spark has exited with bad exit code ($spark_exit_code)"
+      echo -e "[$(date +"%FT%T.%s")] Spark has exited with bad exit code ($spark_exit_code)"
     fi
   fi
 }
 
 generate_flamegraph() {
   rm -rf stack_traces
-  echo -e "[$(date)] Collecting profiling metrics"
+  echo -e "[$(date +"%FT%T.%s")] Collecting profiling metrics"
 
   $PYTHON $install_dir/influxdb_dump.py \
     -o $local_ip -r $influx_http_port -u profiler \
     -p profiler -d profiler -t spark -e sparkapp -x stack_traces >/dev/null 2>&1 && :
 
   if [ $? -ne 0 ]; then
-    echo -e "[$(date)] No profiling metrics were recorded!"
+    echo -e "[$(date +"%FT%T.%s")] No profiling metrics were recorded!"
     return 0
   fi
 
@@ -226,7 +226,7 @@ generate_flamegraph() {
     stack_traces/all_*.txt > flamegraph.svg
 
   rm -rf stack_traces
-  echo -e "[$(date)] Created flamegraph: $(pwd)/flamegraph.svg"
+  echo -e "[$(date +"%FT%T.%s")] Created flamegraph: $(pwd)/flamegraph.svg"
 }
 
 main() {
