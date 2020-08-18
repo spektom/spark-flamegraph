@@ -237,6 +237,11 @@ main() {
   influx_uri=http://${local_ip}:${influx_http_port}
   flamegraph_title="Spark Application"
 
+  if [ -z "${WORKER_NODE}" ]; then
+    install_deps
+    exit 0
+  fi
+
   if [ -z "${TEST}" ]; then
     install_deps
     run_influxdb
