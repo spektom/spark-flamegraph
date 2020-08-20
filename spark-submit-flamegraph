@@ -238,7 +238,7 @@ main() {
   flamegraph_title="Spark Application"
 
   if [ -z "${ONLY_INSTALL_DEPS+proceed}" ]; then
-    echo "Proceeding..."
+    : echo "Proceeding..."
   else
     install_deps
     exit 0
