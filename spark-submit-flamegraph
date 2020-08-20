@@ -237,7 +237,9 @@ main() {
   influx_uri=http://${local_ip}:${influx_http_port}
   flamegraph_title="Spark Application"
 
-  if [ -n "${ONLY_INSTALL_DEPS}" ]; then
+  if [ -z "${ONLY_INSTALL_DEPS+proceed}" ]; then
+    echo "Proceeding..."
+  else
     install_deps
     exit 0
   fi
